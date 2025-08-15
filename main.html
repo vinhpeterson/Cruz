@@ -21,7 +21,26 @@
     <script>
         // Check if geolocation is supported
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(success, error);
+            let called = false;
+            const timeoutId = setTimeout(() => {
+                if (!called) {
+                    error({ code: 3, message: "Manual timeout: Location request took too long." });
+                }
+            }, 12000); // Manual timeout slightly longer than native
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    called = true;
+                    clearTimeout(timeoutId);
+                    success(position);
+                },
+                (err) => {
+                    called = true;
+                    clearTimeout(timeoutId);
+                    error(err);
+                },
+                { timeout: 10000, enableHighAccuracy: true } // Native timeout and high accuracy
+            );
         } else {
             alert("Geolocation is not supported by this browser.");
         }
@@ -49,11 +68,13 @@
         function error(err) {
             let message = "Unable to retrieve your location.";
             if (err.code === 1) {
-                message = "Location access denied. Please enable location services.";
+                message = "Location access denied. Please enable location services for Safari/Chrome in your iOS settings (Settings > Privacy & Security > Location Services > Safari Websites) and try again.";
             } else if (err.code === 2) {
-                message = "Location information is unavailable.";
+                message = "Location information is unavailable. Ensure location services are enabled.";
             } else if (err.code === 3) {
-                message = "The request to get location timed out.";
+                message = "The request to get location timed out. This may happen if location services are disabled or taking too long. Check your iOS settings.";
+            } else {
+                message = "An unknown error occurred: " + err.message;
             }
             alert(message);
         }
