@@ -205,5 +205,103 @@
     // Prevent accidental two-finger zoom scroll trapping on mobile
     map.gestureHandling && map.gestureHandling.enable();
   </script>
+  <!-- GUN.js -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <script>
+    // --- Simple multi-user presence with GUN ---
+    // Community relays (uptime can vary). Add your own with ?peer=URL or localStorage.setItem('gunPeers', JSON.stringify([...]))
+    const defaultPeers = [
+      'https://gun-manhattan.herokuapp.com/gun',
+    ];
+    try {
+      const qp = new URLSearchParams(location.search);
+      const urlPeer = qp.get('peer');
+      const stored = JSON.parse(localStorage.getItem('gunPeers')||'[]');
+      var peers = [...new Set([...(urlPeer? [urlPeer]:[]), ...stored, ...defaultPeers])];
+    } catch(e){ var peers = defaultPeers }
+
+    const gun = Gun({ peers, retry: 2000, file: false });
+
+    // Room key (everyone in same room sees each other). Use ?room=name to split.
+    const room = 'gps/v1/' + (new URLSearchParams(location.search).get('room') || 'global');
+    const presence = gun.get(room);
+
+    // Create / persist a lightweight identity for this device
+    const myId = localStorage.getItem('gps_id') || (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+    localStorage.setItem('gps_id', myId);
+
+    // Keep map markers of others
+    const otherMarkers = new Map();
+
+    function upsertOther(id, data){
+      if (!data || id === myId) return;
+      const { lat, lng, ts, name, color } = data;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      let m = otherMarkers.get(id);
+      if (!m) {
+        const ic = L.divIcon({ className: '', html: `<div style="display:grid;place-items:center;">
+            <div style="width:14px;height:14px;border-radius:50%;background:${color||'#22d3ee'};box-shadow:0 0 0 3px rgba(34,211,238,.25);"></div>
+            <div style="margin-top:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:120px;text-align:center;">${(name||'User')}</div>
+          </div>` });
+        m = L.marker([lat,lng], { icon: ic, interactive: false });
+        m.addTo(map);
+        otherMarkers.set(id, m);
+      } else {
+        m.setLatLng([lat,lng]);
+      }
+      m._lastSeen = ts || Date.now();
+    }
+
+    // Subscribe to others
+    presence.map().on((data, id) => upsertOther(id, data));
+
+    // Broadcast our position on each GPS update
+    const displayName = localStorage.getItem('gps_name') || (navigator.userAgentData?.platform || navigator.platform || 'User');
+    const color = localStorage.getItem('gps_color') || '#4f8cff';
+
+    function broadcast(lat, lng){
+      presence.get(myId).put({ lat, lng, ts: Gun.state(), name: displayName, color });
+    }
+
+    // Hook into existing geolocation handler
+    const _onPosition = onPosition; // from previous script
+    onPosition = function(pos){
+      _onPosition(pos);
+      try { broadcast(pos.coords.latitude, pos.coords.longitude); } catch(e){}
+    }
+
+    // Periodic rebroadcast (keeps presence fresh if stationary)
+    setInterval(() => {
+      if (!lastPos) return;
+      broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
+    }, 15000);
+
+    // GC stale markers (peer-to-peer TTL simulation)
+    setInterval(() => {
+      const now = Date.now();
+      for (const [id, m] of otherMarkers) {
+        if (now - (m._lastSeen || 0) > 60000) { // >60s without update: hide
+          map.removeLayer(m); otherMarkers.delete(id);
+        }
+      }
+    }, 10000);
+
+    // UI wiring: show relay/room status
+    const statusEl = document.getElementById('statusText');
+    const metaEl = document.getElementById('metaText');
+
+    function setPeerStatus(){
+      const list = Object.keys(gun.back('opt.peers')||{});
+      const up = list.filter(u => gun.back('opt.peers')[u] && gun.back('opt.peers')[u].wire && !gun.back('opt.peers')[u].wire.hied);
+      metaEl.textContent = `Peers ${up.length}/${list.length} · Room ${room.split('/').pop()}`;
+    }
+
+    setInterval(setPeerStatus, 3000);
+
+    // Quick settings helpers in console:
+    // localStorage.setItem('gps_name', 'Vinh'); location.reload();
+    // localStorage.setItem('gps_color', '#22c55e'); location.reload();
+    // localStorage.setItem('gunPeers', JSON.stringify(['https://your-relay.example.com/gun'])); location.reload();
+  </script>
 </body>
 </html>
