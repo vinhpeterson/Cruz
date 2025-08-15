@@ -1,2 +1,128 @@
-hello world
-yo
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Map Tracker with Gun.js</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script> <!-- Optional for potential future auth, but not used here -->
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([0, 0], 2); // Default view
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Markers storage
+        const markers = {};
+        const ownMarkers = {}; // To distinguish own marker if needed
+
+        // Generate or retrieve unique user ID
+        let userId = localStorage.getItem('userId');
+        if (!userId) {
+            userId = 'user-' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('userId', userId);
+        }
+
+        // Initialize Gun with public peers (these are community-hosted, may change; add more if needed)
+        const gun = Gun({
+            peers: [
+                'https://gun-manhattan.herokuapp.com/gun',
+                'https://gun-us.herokuapp.com/gun',
+                'https://gunjs.herokuapp.com/gun'
+            ]
+        });
+
+        // Get the 'users' node for this app
+        const users = gun.get('multiplayer-map-tracker-users');
+
+        // Function to update or create marker
+        function updateMarker(id, lat, lng, isOwn = false) {
+            if (markers[id]) {
+                markers[id].setLatLng([lat, lng]);
+            } else {
+                const marker = L.marker([lat, lng], {
+                    icon: L.divIcon({
+                        className: 'user-marker',
+                        html: `<div style="background-color: ${isOwn ? 'blue' : 'red'}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`
+                    })
+                }).addTo(map).bindPopup(`User: ${id}`);
+                markers[id] = marker;
+                if (isOwn) ownMarkers[id] = marker;
+            }
+        }
+
+        // Function to remove marker
+        function removeMarker(id) {
+            if (markers[id]) {
+                map.removeLayer(markers[id]);
+                delete markers[id];
+                delete ownMarkers[id];
+            }
+        }
+
+        // Listen for all users' data
+        users.map().on((data, key) => {
+            if (data === null) {
+                removeMarker(key);
+                return;
+            }
+            if (!data || !data.lat || !data.lng || !data.time) return;
+
+            // Check if data is recent (e.g., within 5 minutes)
+            const now = Date.now();
+            if (now - data.time > 300000) { // 5 minutes
+                removeMarker(key);
+                return;
+            }
+
+            const isOwn = key === userId;
+            updateMarker(key, data.lat, data.lng, isOwn);
+        });
+
+        // Get and watch user's location
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    // Update own position on map
+                    updateMarker(userId, latitude, longitude, true);
+                    // Center map on own position initially
+                    if (!map.getBounds().contains([latitude, longitude])) {
+                        map.setView([latitude, longitude], 13);
+                    }
+                    // Send to Gun
+                    users.get(userId).put({
+                        lat: latitude,
+                        lng: longitude,
+                        time: Date.now()
+                    });
+                },
+                (error) => {
+                    console.error('Geolocation error:', error);
+                    alert('Unable to get location. Please enable geolocation.');
+                },
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+            );
+        } else {
+            alert('Geolocation not supported by your browser.');
+        }
+
+        // Cleanup own data on unload (optional, but good practice)
+        window.addEventListener('beforeunload', () => {
+            users.get(userId).put(null);
+        });
+    </script>
+</body>
+</html>
