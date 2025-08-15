@@ -2,127 +2,635 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Map Tracker with Gun.js</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Live Map Tracker</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script> <!-- Optional for potential future auth, but not used here -->
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+
         #map {
             height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .control-panel {
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 200px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #44ff44;
+        }
+
+        .status-dot.locating {
+            background: #ffaa44;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .user-list {
+            max-height: 120px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-name {
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .user-distance {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .settings-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            font-size: 20px;
+        }
+
+        .location-btn {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            z-index: 1000;
+            background: #007AFF;
+            border: none;
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3);
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: #2a2a2a;
+            border-radius: 16px;
+            padding: 20px;
+            max-width: 400px;
             width: 100%;
+        }
+
+        .modal h3 {
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        .btn-primary {
+            background: #007AFF;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: #2a2a2a;
+            color: white;
+            border-radius: 8px;
+        }
+
+        .leaflet-popup-tip {
+            background: #2a2a2a;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+            }
+            
+            .control-panel {
+                padding: 12px;
+                min-width: 150px;
+            }
+
+            .settings-btn, .location-btn {
+                right: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    
+    <div class="controls">
+        <div class="control-panel">
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div>
+                <strong>Room:</strong> <span id="roomCode">Loading...</span>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <div><strong>Online Users:</strong> <span id="userCount">0</span></div>
+            <div class="user-list" id="userList"></div>
+        </div>
+    </div>
+
+    <button class="location-btn" id="centerBtn" title="Center on my location">📍</button>
+    <button class="settings-btn" id="settingsBtn">⚙️</button>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <h3>Settings</h3>
+            <div class="input-group">
+                <label>Your Name:</label>
+                <input type="text" id="usernameInput" placeholder="Enter your name">
+            </div>
+            <div class="input-group">
+                <label>Room Code:</label>
+                <input type="text" id="roomInput" placeholder="Enter room code">
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.skypack.dev/gun"></script>
     <script>
-        // Initialize the map
-        const map = L.map('map').setView([0, 0], 2); // Default view
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
-        // Markers storage
-        const markers = {};
-        const ownMarkers = {}; // To distinguish own marker if needed
-
-        // Generate or retrieve unique user ID
-        let userId = localStorage.getItem('userId');
-        if (!userId) {
-            userId = 'user-' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('userId', userId);
-        }
-
-        // Initialize Gun with public peers (these are community-hosted, may change; add more if needed)
-        const gun = Gun({
-            peers: [
-                'https://gun-manhattan.herokuapp.com/gun',
-                'https://gun-us.herokuapp.com/gun',
-                'https://gunjs.herokuapp.com/gun'
-            ]
-        });
-
-        // Get the 'users' node for this app
-        const users = gun.get('multiplayer-map-tracker-users');
-
-        // Function to update or create marker
-        function updateMarker(id, lat, lng, isOwn = false) {
-            if (markers[id]) {
-                markers[id].setLatLng([lat, lng]);
-            } else {
-                const marker = L.marker([lat, lng], {
-                    icon: L.divIcon({
-                        className: 'user-marker',
-                        html: `<div style="background-color: ${isOwn ? 'blue' : 'red'}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`
-                    })
-                }).addTo(map).bindPopup(`User: ${id}`);
-                markers[id] = marker;
-                if (isOwn) ownMarkers[id] = marker;
-            }
-        }
-
-        // Function to remove marker
-        function removeMarker(id) {
-            if (markers[id]) {
-                map.removeLayer(markers[id]);
-                delete markers[id];
-                delete ownMarkers[id];
-            }
-        }
-
-        // Listen for all users' data
-        users.map().on((data, key) => {
-            if (data === null) {
-                removeMarker(key);
-                return;
-            }
-            if (!data || !data.lat || !data.lng || !data.time) return;
-
-            // Check if data is recent (e.g., within 5 minutes)
-            const now = Date.now();
-            if (now - data.time > 300000) { // 5 minutes
-                removeMarker(key);
-                return;
+        class LiveMapTracker {
+            constructor() {
+                this.map = null;
+                this.gun = null;
+                this.users = new Map();
+                this.currentUser = null;
+                this.userMarkers = new Map();
+                this.myMarker = null;
+                this.watchId = null;
+                this.roomCode = this.generateRoomCode();
+                this.username = this.generateUsername();
+                
+                this.init();
             }
 
-            const isOwn = key === userId;
-            updateMarker(key, data.lat, data.lng, isOwn);
-        });
+            generateRoomCode() {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('room') || 'room-' + Math.random().toString(36).substr(2, 6);
+            }
 
-        // Get and watch user's location
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    // Update own position on map
-                    updateMarker(userId, latitude, longitude, true);
-                    // Center map on own position initially
-                    if (!map.getBounds().contains([latitude, longitude])) {
-                        map.setView([latitude, longitude], 13);
+            generateUsername() {
+                const adjectives = ['Swift', 'Brave', 'Clever', 'Quick', 'Silent', 'Bright'];
+                const animals = ['Fox', 'Wolf', 'Eagle', 'Tiger', 'Hawk', 'Bear'];
+                return adjectives[Math.floor(Math.random() * adjectives.length)] + 
+                       animals[Math.floor(Math.random() * animals.length)] + 
+                       Math.floor(Math.random() * 100);
+            }
+
+            init() {
+                this.setupMap();
+                this.setupGun();
+                this.setupEventListeners();
+                this.startLocationTracking();
+                this.updateUI();
+            }
+
+            setupMap() {
+                this.map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([37.7749, -122.4194], 13);
+
+                // Dark theme tiles
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '©OpenStreetMap, ©CartoDB',
+                    maxZoom: 19
+                }).addTo(this.map);
+
+                // Add zoom control to bottom left
+                L.control.zoom({
+                    position: 'bottomleft'
+                }).addTo(this.map);
+
+                // Custom attribution
+                L.control.attribution({
+                    position: 'bottomright',
+                    prefix: false
+                }).addTo(this.map);
+            }
+
+            setupGun() {
+                this.gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://peer.wallie.io/gun']);
+                this.currentUser = {
+                    id: 'user-' + Math.random().toString(36).substr(2, 9),
+                    name: this.username,
+                    lat: null,
+                    lng: null,
+                    lastSeen: Date.now(),
+                    color: this.generateColor()
+                };
+
+                // Listen for user updates
+                this.gun.get(this.roomCode).get('users').on((data, key) => {
+                    if (data && key !== this.currentUser.id) {
+                        this.updateUserOnMap(key, data);
                     }
-                    // Send to Gun
-                    users.get(userId).put({
-                        lat: latitude,
-                        lng: longitude,
-                        time: Date.now()
+                });
+
+                // Clean up old users periodically
+                setInterval(() => this.cleanupOldUsers(), 30000);
+                
+                this.updateStatus('connected');
+            }
+
+            generateColor() {
+                const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F06292'];
+                return colors[Math.floor(Math.random() * colors.length)];
+            }
+
+            setupEventListeners() {
+                document.getElementById('centerBtn').onclick = () => this.centerOnMyLocation();
+                document.getElementById('settingsBtn').onclick = () => this.openModal();
+                
+                // Handle room code changes in URL
+                window.addEventListener('popstate', () => {
+                    this.roomCode = this.generateRoomCode();
+                    this.updateUI();
+                    this.setupGun(); // Reconnect to new room
+                });
+            }
+
+            startLocationTracking() {
+                if (!navigator.geolocation) {
+                    this.updateStatus('error', 'Geolocation not supported');
+                    return;
+                }
+
+                this.updateStatus('locating');
+
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 5000
+                };
+
+                this.watchId = navigator.geolocation.watchPosition(
+                    (position) => this.onLocationUpdate(position),
+                    (error) => this.onLocationError(error),
+                    options
+                );
+            }
+
+            onLocationUpdate(position) {
+                const { latitude, longitude, accuracy } = position.coords;
+                
+                this.currentUser.lat = latitude;
+                this.currentUser.lng = longitude;
+                this.currentUser.accuracy = accuracy;
+                this.currentUser.lastSeen = Date.now();
+
+                this.updateMyMarker();
+                this.broadcastLocation();
+                this.updateStatus('connected');
+
+                // Center map on first location
+                if (!this.hasInitialLocation) {
+                    this.map.setView([latitude, longitude], 16);
+                    this.hasInitialLocation = true;
+                }
+            }
+
+            onLocationError(error) {
+                console.error('Location error:', error);
+                this.updateStatus('error', 'Location access denied');
+            }
+
+            updateMyMarker() {
+                if (!this.currentUser.lat || !this.currentUser.lng) return;
+
+                if (this.myMarker) {
+                    this.myMarker.setLatLng([this.currentUser.lat, this.currentUser.lng]);
+                } else {
+                    const icon = L.divIcon({
+                        html: `<div style="background: ${this.currentUser.color}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.5);"></div>`,
+                        className: 'custom-marker',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
                     });
-                },
-                (error) => {
-                    console.error('Geolocation error:', error);
-                    alert(`Geolocation failed: Error ${error.code} - ${error.message}. Ensure the page is served over HTTPS and permissions are enabled.`);
-                },
-                { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
-            );
-        } else {
-            alert('Geolocation not supported by your browser.');
+
+                    this.myMarker = L.marker([this.currentUser.lat, this.currentUser.lng], { icon })
+                        .addTo(this.map)
+                        .bindPopup(`<strong>${this.currentUser.name}</strong><br>You are here`);
+                }
+            }
+
+            broadcastLocation() {
+                if (this.gun && this.currentUser.lat && this.currentUser.lng) {
+                    this.gun.get(this.roomCode).get('users').get(this.currentUser.id).put(this.currentUser);
+                }
+            }
+
+            updateUserOnMap(userId, userData) {
+                if (!userData || !userData.lat || !userData.lng) return;
+
+                this.users.set(userId, userData);
+
+                if (this.userMarkers.has(userId)) {
+                    this.userMarkers.get(userId).setLatLng([userData.lat, userData.lng]);
+                } else {
+                    const icon = L.divIcon({
+                        html: `<div style="background: ${userData.color || '#666'}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.4);"></div>`,
+                        className: 'custom-marker',
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    });
+
+                    const marker = L.marker([userData.lat, userData.lng], { icon })
+                        .addTo(this.map)
+                        .bindPopup(`<strong>${userData.name || 'Anonymous'}</strong><br>Last seen: ${this.formatTime(userData.lastSeen)}`);
+
+                    this.userMarkers.set(userId, marker);
+                }
+
+                this.updateUsersList();
+            }
+
+            cleanupOldUsers() {
+                const now = Date.now();
+                const timeout = 2 * 60 * 1000; // 2 minutes
+
+                this.users.forEach((userData, userId) => {
+                    if (now - userData.lastSeen > timeout) {
+                        this.users.delete(userId);
+                        if (this.userMarkers.has(userId)) {
+                            this.map.removeLayer(this.userMarkers.get(userId));
+                            this.userMarkers.delete(userId);
+                        }
+                    }
+                });
+
+                this.updateUsersList();
+            }
+
+            updateUsersList() {
+                const userList = document.getElementById('userList');
+                const userCount = document.getElementById('userCount');
+                
+                userList.innerHTML = '';
+                userCount.textContent = this.users.size;
+
+                this.users.forEach((userData, userId) => {
+                    const userItem = document.createElement('div');
+                    userItem.className = 'user-item';
+                    
+                    const distance = this.calculateDistance(userData);
+                    const distanceText = distance < 1000 ? `${Math.round(distance)}m` : `${(distance/1000).toFixed(1)}km`;
+                    
+                    userItem.innerHTML = `
+                        <span class="user-name">${userData.name || 'Anonymous'}</span>
+                        <span class="user-distance">${distanceText}</span>
+                    `;
+                    
+                    userList.appendChild(userItem);
+                });
+            }
+
+            calculateDistance(otherUser) {
+                if (!this.currentUser.lat || !this.currentUser.lng || !otherUser.lat || !otherUser.lng) {
+                    return 0;
+                }
+
+                const R = 6371e3; // Earth's radius in meters
+                const φ1 = this.currentUser.lat * Math.PI/180;
+                const φ2 = otherUser.lat * Math.PI/180;
+                const Δφ = (otherUser.lat - this.currentUser.lat) * Math.PI/180;
+                const Δλ = (otherUser.lng - this.currentUser.lng) * Math.PI/180;
+
+                const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                         Math.cos(φ1) * Math.cos(φ2) *
+                         Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+                return R * c;
+            }
+
+            formatTime(timestamp) {
+                const now = Date.now();
+                const diff = now - timestamp;
+                if (diff < 60000) return 'just now';
+                if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+                return `${Math.floor(diff/3600000)}h ago`;
+            }
+
+            centerOnMyLocation() {
+                if (this.currentUser.lat && this.currentUser.lng) {
+                    this.map.setView([this.currentUser.lat, this.currentUser.lng], 16);
+                }
+            }
+
+            updateStatus(status, message = '') {
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+                
+                statusDot.className = `status-dot ${status}`;
+                
+                switch(status) {
+                    case 'connected':
+                        statusText.textContent = 'Connected';
+                        break;
+                    case 'locating':
+                        statusText.textContent = 'Getting location...';
+                        break;
+                    case 'error':
+                        statusText.textContent = message || 'Error';
+                        break;
+                    default:
+                        statusText.textContent = 'Connecting...';
+                }
+            }
+
+            updateUI() {
+                document.getElementById('roomCode').textContent = this.roomCode;
+                const url = new URL(window.location);
+                url.searchParams.set('room', this.roomCode);
+                window.history.replaceState({}, '', url);
+            }
+
+            openModal() {
+                document.getElementById('usernameInput').value = this.username;
+                document.getElementById('roomInput').value = this.roomCode;
+                document.getElementById('settingsModal').style.display = 'flex';
+            }
         }
 
-        // Cleanup own data on unload (optional, but good practice)
-        window.addEventListener('beforeunload', () => {
-            users.get(userId).put(null);
+        // Global functions for modal
+        function saveSettings() {
+            const username = document.getElementById('usernameInput').value.trim();
+            const roomCode = document.getElementById('roomInput').value.trim();
+            
+            if (username) {
+                tracker.username = username;
+                tracker.currentUser.name = username;
+            }
+            
+            if (roomCode && roomCode !== tracker.roomCode) {
+                tracker.roomCode = roomCode;
+                tracker.users.clear();
+                tracker.userMarkers.forEach(marker => tracker.map.removeLayer(marker));
+                tracker.userMarkers.clear();
+                tracker.setupGun();
+                tracker.updateUI();
+            }
+            
+            closeModal();
+        }
+
+        function closeModal() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('settingsModal').onclick = (e) => {
+            if (e.target === document.getElementById('settingsModal')) {
+                closeModal();
+            }
+        };
+
+        // Initialize the app
+        const tracker = new LiveMapTracker();
+
+        // Handle app installation prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            // Could show install button here
         });
+
+        // Service worker for offline capability (optional)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('data:text/javascript,')
+                    .catch(() => {}); // Silent fail for demo
+            });
+        }
     </script>
 </body>
 </html>
