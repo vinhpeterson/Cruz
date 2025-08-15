@@ -111,7 +111,7 @@
                 },
                 (error) => {
                     console.error('Geolocation error:', error);
-                    alert('Unable to get location. Please enable geolocation.');
+                    alert(`Geolocation failed: Error ${error.code} - ${error.message}. Ensure the page is served over HTTPS and permissions are enabled.`);
                 },
                 { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
             );
