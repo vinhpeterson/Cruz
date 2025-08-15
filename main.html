@@ -2,347 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Live Location Map</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple GPS Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEp6G5ohue5zt4XPLT2O7Lrptq+0tfIJ3mkeVvTxj0x5/x/9edm4x/d1iCsoZJ3HG9Oc8S7Q==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iqC0D3ZAjj6NSJnsar6hhnzbEOKFe1zqxisQwC4T3qGeiJ9sFT42zimbRNpN8G3x89rEA==" crossorigin=""></script>
     <style>
-        * {
+        html, body {
+            height: 100%;
             margin: 0;
-            padding: 0;
-            box-sizing: border-box;
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-            overflow: hidden;
-        }
-
         #map {
-            height: 100vh;
-            width: 100vw;
-        }
-
-        .location-btn {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            z-index: 1000;
-            background: #007AFF;
-            border: none;
-            color: white;
-            border-radius: 50%;
-            width: 56px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 24px;
-            box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3);
-            transition: transform 0.2s ease;
-        }
-
-        .location-btn:hover {
-            transform: scale(1.05);
-        }
-
-        .location-btn:active {
-            transform: scale(0.95);
-        }
-
-        .status-panel {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 15px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            max-width: 400px;
-            margin: 0 auto;
-        }
-
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ff4444;
-            animation: pulse 2s infinite;
-        }
-
-        .status-dot.locating {
-            background: #ffaa44;
-        }
-
-        .status-dot.connected {
-            background: #44ff44;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .status-text {
-            font-size: 14px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .accuracy-info {
-            font-size: 12px;
-            color: #666;
-            margin-left: auto;
-        }
-
-        @media (max-width: 768px) {
-            .status-panel {
-                left: 15px;
-                right: 15px;
-                padding: 12px;
-            }
-            
-            .location-btn {
-                bottom: 20px;
-                right: 20px;
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
-            }
-        }
-
-        /* Custom marker styles */
-        .user-marker {
-            background: #007AFF;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            border: 3px solid white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            position: relative;
-        }
-
-        .user-marker::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 6px;
-            height: 6px;
-            background: white;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        .accuracy-circle {
-            border: 2px solid rgba(0, 122, 255, 0.3);
-            background: rgba(0, 122, 255, 0.1);
+            height: 100%;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    
-    <div class="status-panel">
-        <div class="status-dot" id="statusDot"></div>
-        <span class="status-text" id="statusText">Getting your location...</span>
-        <span class="accuracy-info" id="accuracyInfo"></span>
-    </div>
-
-    <button class="location-btn" id="centerBtn" title="Center on my location">📍</button>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        class SimpleLocationMap {
-            constructor() {
-                this.map = null;
-                this.userMarker = null;
-                this.accuracyCircle = null;
-                this.watchId = null;
-                this.hasInitialLocation = false;
-                
-                this.init();
-            }
-
-            init() {
-                this.setupMap();
-                this.startLocationTracking();
-                this.setupEventListeners();
-            }
-
-            setupMap() {
-                // Initialize map centered on San Francisco (will update to user location)
-                this.map = L.map('map', {
-                    zoomControl: false,
-                    attributionControl: true
-                }).setView([37.7749, -122.4194], 13);
-
-                // Add tile layer (OpenStreetMap style similar to Google Maps)
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
-                    maxZoom: 19
-                }).addTo(this.map);
-
-                // Add zoom control to bottom left
-                L.control.zoom({
-                    position: 'bottomleft'
-                }).addTo(this.map);
-            }
-
-            setupEventListeners() {
-                document.getElementById('centerBtn').onclick = () => this.centerOnMyLocation();
-            }
-
-            startLocationTracking() {
-                if (!navigator.geolocation) {
-                    this.updateStatus('error', 'Geolocation not supported by this browser');
-                    return;
-                }
-
-                this.updateStatus('locating', 'Getting your location...');
-
-                const options = {
-                    enableHighAccuracy: true,
-                    timeout: 15000,
-                    maximumAge: 10000
-                };
-
-                // Get initial position
-                navigator.geolocation.getCurrentPosition(
-                    (position) => this.onLocationUpdate(position),
-                    (error) => this.onLocationError(error),
-                    options
-                );
-
-                // Watch for position changes
-                this.watchId = navigator.geolocation.watchPosition(
-                    (position) => this.onLocationUpdate(position),
-                    (error) => this.onLocationError(error),
-                    options
-                );
-            }
-
-            onLocationUpdate(position) {
-                const { latitude, longitude, accuracy } = position.coords;
-                
-                console.log('Location update:', { latitude, longitude, accuracy });
-                
-                this.updateLocationMarker(latitude, longitude, accuracy);
-                this.updateStatus('connected', 'Location found', accuracy);
-
-                // Center map on first location or if user is far from current view
-                if (!this.hasInitialLocation) {
-                    this.map.setView([latitude, longitude], 16);
-                    this.hasInitialLocation = true;
-                }
-            }
-
-            onLocationError(error) {
-                console.error('Location error:', error);
-                
-                let errorMessage = 'Unable to get your location';
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        errorMessage = 'Location access denied. Please allow location access.';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        errorMessage = 'Location information unavailable';
-                        break;
-                    case error.TIMEOUT:
-                        errorMessage = 'Location request timed out';
-                        break;
-                }
-                
-                this.updateStatus('error', errorMessage);
-            }
-
-            updateLocationMarker(lat, lng, accuracy) {
-                // Remove existing markers
-                if (this.userMarker) {
-                    this.map.removeLayer(this.userMarker);
-                }
-                if (this.accuracyCircle) {
-                    this.map.removeLayer(this.accuracyCircle);
-                }
-
-                // Add accuracy circle
-                this.accuracyCircle = L.circle([lat, lng], {
-                    radius: accuracy,
-                    className: 'accuracy-circle',
-                    interactive: false
-                }).addTo(this.map);
-
-                // Create custom marker
-                const markerIcon = L.divIcon({
-                    html: '<div class="user-marker"></div>',
-                    className: 'custom-marker-container',
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10]
-                });
-
-                // Add user marker
-                this.userMarker = L.marker([lat, lng], { 
-                    icon: markerIcon,
-                    zIndexOffset: 1000 
-                }).addTo(this.map);
-
-                // Add popup with location info
-                const coords = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                const accuracyText = accuracy < 1000 ? `${Math.round(accuracy)}m` : `${(accuracy/1000).toFixed(1)}km`;
-                
-                this.userMarker.bindPopup(
-                    `<strong>Your Location</strong><br>
-                     ${coords}<br>
-                     Accuracy: ±${accuracyText}`
-                );
-            }
-
-            centerOnMyLocation() {
-                if (this.userMarker) {
-                    const latlng = this.userMarker.getLatLng();
-                    this.map.setView(latlng, Math.max(this.map.getZoom(), 16));
-                    this.userMarker.openPopup();
-                } else {
-                    // Retry getting location
-                    this.startLocationTracking();
-                }
-            }
-
-            updateStatus(status, message, accuracy = null) {
-                const statusDot = document.getElementById('statusDot');
-                const statusText = document.getElementById('statusText');
-                const accuracyInfo = document.getElementById('accuracyInfo');
-                
-                statusDot.className = `status-dot ${status}`;
-                statusText.textContent = message;
-                
-                if (accuracy !== null) {
-                    const accuracyText = accuracy < 1000 ? 
-                        `±${Math.round(accuracy)}m` : 
-                        `±${(accuracy/1000).toFixed(1)}km`;
-                    accuracyInfo.textContent = accuracyText;
-                } else {
-                    accuracyInfo.textContent = '';
-                }
-            }
+        // Check if geolocation is supported
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(success, error);
+        } else {
+            alert("Geolocation is not supported by this browser.");
         }
 
-        // Initialize the app when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new SimpleLocationMap();
-        });
+        // Success callback: Initialize map with user's location
+        function success(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
 
-        // Handle page visibility changes to manage battery usage
-        document.addEventListener('visibilitychange', () => {
-            // Could pause/resume location tracking when tab is hidden
-            console.log('Page visibility changed:', document.hidden ? 'hidden' : 'visible');
-        });
+            // Create the map centered on the user's location (zoom level 13 for street view)
+            const map = L.map('map').setView([lat, lon], 13);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Add a marker for the user's location
+            L.marker([lat, lon]).addTo(map)
+                .bindPopup('You are here')
+                .openPopup();
+        }
+
+        // Error callback: Handle geolocation errors
+        function error(err) {
+            let message = "Unable to retrieve your location.";
+            if (err.code === 1) {
+                message = "Location access denied. Please enable location services.";
+            } else if (err.code === 2) {
+                message = "Location information is unavailable.";
+            } else if (err.code === 3) {
+                message = "The request to get location timed out.";
+            }
+            alert(message);
+        }
     </script>
 </body>
 </html>
