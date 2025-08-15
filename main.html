@@ -16,6 +16,7 @@
     .fab { position: fixed; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1001; display:grid; place-items:center; width:56px; height:56px; border-radius:16px; background:#111216; color:#fff; border:1px solid rgba(255,255,255,.1); box-shadow:0 8px 30px rgba(0,0,0,.35); font-size:24px; user-select:none; -webkit-tap-highlight-color:transparent; cursor:pointer; }
     .leaflet-container { background:#0b0b0c; }
     .hint { position: fixed; left: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 1001; font-size:12px; color:#b9b9b9; background:rgba(17,18,22,.9); padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.08); max-width: 80vw; }
+    .pill { padding:10px 12px; border-radius:12px; background:#1a1b20; color:#fff; border:1px solid rgba(255,255,255,.12); }
   </style>
 </head>
 <body>
@@ -26,17 +27,18 @@
     </div>
     <div id="map"></div>
     <!-- Controls -->
-    <div id="controls" style="position:fixed;left:12px;bottom:calc(12px + var(--safe-bottom));z-index:1002;display:flex;gap:8px;align-items:center;">
-      <button id="shareToggle" style="padding:10px 12px;border-radius:12px;background:#1a1b20;color:#fff;border:1px solid rgba(255,255,255,.12);">▶ Share</button>
-      <button id="updateNow" style="padding:10px 12px;border-radius:12px;background:#1a1b20;color:#fff;border:1px solid rgba(255,255,255,.12);">↻ Update</button>
-      <button id="settingsBtn" style="padding:10px 12px;border-radius:12px;background:#1a1b20;color:#fff;border:1px solid rgba(255,255,255,.12);">⚙️</button>
+    <div id="controls" style="position:fixed;left:12px;bottom:calc(12px + var(--safe-bottom));z-index:1002;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button id="shareToggle" class="pill">⏸ Stop</button>
+      <button id="settingsBtn" class="pill">⚙️</button>
+      <button id="wakeBtn" class="pill">🔒 Keep screen on</button>
     </div>
+
     <dialog id="settingsDlg" style="border:none;border-radius:16px;background:#121318;color:#fff;padding:16px;max-width:92vw;">
       <form method="dialog" style="display:grid;gap:10px;">
         <div style="font-weight:600">Settings</div>
         <label style="display:grid;gap:6px;font-size:13px;">
           <span>Name</span>
-          <input id="nameInput" placeholder="Your name" style="background:#1a1b20;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;padding:10px;"/>
+          <input id="nameInput" placeholder="Your name" class="pill" style="padding:10px;"/>
         </label>
         <label style="display:grid;gap:6px;font-size:13px;">
           <span>Color</span>
@@ -44,22 +46,23 @@
         </label>
         <label style="display:grid;gap:6px;font-size:13px;">
           <span>Room</span>
-          <input id="roomInput" placeholder="global" style="background:#1a1b20;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;padding:10px;"/>
+          <input id="roomInput" placeholder="global" class="pill" style="padding:10px;"/>
           <small style="color:#aaa">Changing room applies instantly (no refresh).</small>
         </label>
         <menu style="display:flex;gap:8px;justify-content:flex-end;margin:0;padding:0;">
-          <button value="cancel" style="padding:10px 12px;border-radius:10px;background:#1a1b20;color:#fff;border:1px solid rgba(255,255,255,.12);">Close</button>
-          <button id="saveSettings" value="default" style="padding:10px 12px;border-radius:10px;background:#2a6fff;color:#fff;border:1px solid rgba(255,255,255,.12);">Save</button>
+          <button value="cancel" class="pill">Close</button>
+          <button id="saveSettings" value="default" class="pill" style="background:#2a6fff;">Save</button>
         </menu>
       </form>
     </dialog>
   </div>
   <div class="fab" id="recenterBtn" title="Recenter">📍</div>
-  <div class="hint">If peers show 0/0, try adding <code>?peer=https://relay.peer.ooo/gun</code> to the URL, or open on HTTPS/localhost.</div>
+  <div class="hint">Tip: If peers show 0/0, add <code>?peer=https://relay.peer.ooo/gun</code> to the URL, or open on HTTPS/localhost.</div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
   <script>
+    // ---------- Map ----------
     const map = L.map('map', { zoomControl:true }).setView([0,0], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
@@ -67,39 +70,45 @@
       iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="8" fill="#4f8cff"/><circle cx="18" cy="18" r="4" fill="white"/></svg>`),
       iconSize: [36,36], iconAnchor:[18,18]
     });
-
     let myMarker = L.marker([0,0], { icon:userIcon }).addTo(map);
     let accuracyCircle = L.circle([0,0], { radius:0, color:'#4f8cff', fillColor:'#4f8cff', fillOpacity:.08, weight:1 }).addTo(map);
+
+    // ---------- UI refs ----------
     const statusText = document.getElementById('statusText');
     const metaText = document.getElementById('metaText');
     const recenterBtn = document.getElementById('recenterBtn');
     const shareToggle = document.getElementById('shareToggle');
-    const updateNowBtn = document.getElementById('updateNow');
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsDlg = document.getElementById('settingsDlg');
     const nameInput = document.getElementById('nameInput');
     const colorInput = document.getElementById('colorInput');
     const roomInput = document.getElementById('roomInput');
     const saveSettingsBtn = document.getElementById('saveSettings');
+    const wakeBtn = document.getElementById('wakeBtn');
 
-    let firstFix = true; let lastPos = null; let watchId = null;
+    // ---------- App state ----------
+    let firstFix = true; let lastPos = null; let watchId = null; let pollTimer = null; let wakeLock = null;
 
+    // ---------- GUN setup (with live room switching) ----------
     const DEFAULT_PEERS = ['https://relay.peer.ooo/gun','https://gun-manhattan.herokuapp.com/gun'];
-    let peers = DEFAULT_PEERS.slice();
-    try {
-      const qp = new URLSearchParams(location.search);
-      const urlPeer = qp.get('peer');
-      const stored = JSON.parse(localStorage.getItem('gunPeers')||'[]');
-      peers = [...new Set([...(urlPeer? [urlPeer]:[]), ...stored, ...DEFAULT_PEERS])];
-    } catch(e){}
+    function getPeers(){
+      try{
+        const qp = new URLSearchParams(location.search);
+        const urlPeer = qp.get('peer');
+        const stored = JSON.parse(localStorage.getItem('gunPeers')||'[]');
+        return [...new Set([...(urlPeer? [urlPeer]:[]), ...stored, ...DEFAULT_PEERS])];
+      }catch(e){ return DEFAULT_PEERS.slice(); }
+    }
+    const gun = Gun({ peers: getPeers(), retry: 2000, file: false });
 
-    const gun = Gun({ peers, retry: 2000, file: false });
-    const room = 'gps/v2/' + (new URLSearchParams(location.search).get('room') || 'global');
-    const presence = gun.get(room);
+    function roomKey(){ return 'gps/v3/' + (new URLSearchParams(location.search).get('room') || localStorage.getItem('gps_room') || 'global'); }
+    let currentRoom = roomKey();
+    let presence = gun.get(currentRoom);
+
     const myId = localStorage.getItem('gps_id') || (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
     localStorage.setItem('gps_id', myId);
-    const displayName = localStorage.getItem('gps_name') || 'User';
-    const color = localStorage.getItem('gps_color') || '#22d3ee';
+    function displayName(){ return localStorage.getItem('gps_name') || 'User'; }
+    function myColor(){ return localStorage.getItem('gps_color') || '#22d3ee'; }
 
     const others = new Map();
     function upsertOther(id, data){
@@ -107,18 +116,39 @@
       const { lat, lng, ts, name, color: clr } = data || {};
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
       let m = others.get(id);
-      const ic = L.divIcon({ className:'', html:`<div style="display:grid;place-items:center;"><div style="width:14px;height:14px;border-radius:50%;background:${clr||'#22d3ee'};box-shadow:0 0 0 3px rgba(34,211,238,.25);"></div><div style="margin-top:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:120px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(name||'User')}</div></div>` });
+      const ic = L.divIcon({ className:'', html:`<div style="display:grid;place-items:center;">
+        <div style="width:14px;height:14px;border-radius:50%;background:${clr||'#22d3ee'};box-shadow:0 0 0 3px rgba(34,211,238,.25);"></div>
+        <div style="margin-top:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:120px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(name||'User')}</div>
+      </div>` });
       if (!m){ m = L.marker([lat,lng], { icon: ic, interactive:false }).addTo(map); others.set(id, m); }
       else { m.setLatLng([lat,lng]); m.setIcon(ic); }
       m._lastSeen = ts || Date.now();
     }
 
-    presence.map().on((data, id) => upsertOther(id, data));
+    function subscribeRoom(){
+      presence.map().on((data, id) => upsertOther(id, data));
+      metaText.textContent = `Peers 0/0 · Room ${currentRoom.split('/').pop()}`;
+    }
+    subscribeRoom();
 
-    function broadcast(lat, lng){
-      presence.get(myId).put({ lat, lng, ts: Gun.state(), name: displayName, color });
+    function switchRoom(newRoom){
+      if (newRoom === currentRoom) return;
+      // Unsubscribe old
+      presence.off();
+      // Clear others' markers
+      for (const [, m] of others){ map.removeLayer(m); }
+      others.clear();
+      // Switch
+      currentRoom = newRoom; presence = gun.get(currentRoom); subscribeRoom();
+      // Broadcast immediately in new room
+      if (lastPos) broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
     }
 
+    function broadcast(lat, lng){
+      presence.get(myId).put({ lat, lng, ts: Gun.state(), name: displayName(), color: myColor() });
+    }
+
+    // ---------- Location: hybrid updater (watch + poll) ----------
     function onPosition(pos){
       lastPos = pos;
       const { latitude, longitude, accuracy } = pos.coords;
@@ -129,7 +159,6 @@
       statusText.innerHTML = `<b>GPS Fix:</b> ${latitude.toFixed(6)}, ${longitude.toFixed(6)} · ±${Math.round(accuracy||0)}m`;
       broadcast(latitude, longitude);
     }
-
     function onError(err){
       const msgs = { 1: 'Permission denied', 2: 'Position unavailable', 3: 'Timeout' };
       statusText.innerHTML = `<b>GPS Error:</b> ${msgs[err.code] || err.message}`;
@@ -139,13 +168,20 @@
       if (!('geolocation' in navigator)) return;
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       watchId = navigator.geolocation.watchPosition(onPosition, onError, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
+      // Fallback poll: refresh a reading every 20s in case watch stalls (iOS quirk)
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(onPosition, ()=>{}, { enableHighAccuracy:true, maximumAge:0, timeout:5000 });
+      }, 20000);
+    }
+    function stopWatch(){
+      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     }
 
-    if ('geolocation' in navigator){
-      startWatch();
-    } else {
-      statusText.textContent = 'Geolocation not supported in this browser.';
-    }
+    // Start immediately (autoshare on)
+    shareToggle.dataset.state = 'on';
+    startWatch();
 
     recenterBtn.addEventListener('click', () => { if (lastPos) map.setView([lastPos.coords.latitude, lastPos.coords.longitude], 17); });
 
@@ -154,71 +190,63 @@
       const sharing = shareToggle.dataset.state !== 'on';
       if (sharing){
         shareToggle.dataset.state = 'on'; shareToggle.textContent = '⏸ Stop';
-        startWatch(); // ensure active
+        startWatch();
         if (lastPos) broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
       } else {
         shareToggle.dataset.state = 'off'; shareToggle.textContent = '▶ Share';
-        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-        // Mark as offline by deleting our node (soft)
+        stopWatch();
         try { presence.get(myId).put(null); } catch(e){}
       }
     });
 
-    updateNowBtn.addEventListener('click', () => {
-      if (!('geolocation' in navigator)) return;
-      navigator.geolocation.getCurrentPosition((p)=>{
-        onPosition(p);
-        try { broadcast(p.coords.latitude, p.coords.longitude); } catch(e){}
-      }, onError, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
-    });
-
     settingsBtn.addEventListener('click', () => {
-      nameInput.value = localStorage.getItem('gps_name') || displayName || '';
-      colorInput.value = (localStorage.getItem('gps_color') || color || '#22d3ee');
-      roomInput.value = (new URLSearchParams(location.search).get('room') || 'global');
+      nameInput.value = localStorage.getItem('gps_name') || displayName() || '';
+      colorInput.value = (localStorage.getItem('gps_color') || myColor());
+      roomInput.value = (new URLSearchParams(location.search).get('room') || localStorage.getItem('gps_room') || 'global');
       settingsDlg.showModal();
     });
 
     saveSettingsBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (nameInput.value) { localStorage.setItem('gps_name', nameInput.value); window.displayName = nameInput.value; }
-      if (colorInput.value) { localStorage.setItem('gps_color', colorInput.value); window.color = colorInput.value; }
-      const oldRoom = room;
-      const newRoom = 'gps/v2/' + (roomInput.value || 'global');
-      if (newRoom !== oldRoom){
-        // switch live: unsubscribe old, subscribe new
-        presence.off();
-        window.presence = gun.get(newRoom);
-        presence.map().on((data, id) => upsertOther(id, data));
-        // broadcast immediately into new room
-        if (lastPos) broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
-      }
+      if (nameInput.value) { localStorage.setItem('gps_name', nameInput.value); }
+      if (colorInput.value) { localStorage.setItem('gps_color', colorInput.value); }
+      const newRoomName = roomInput.value || 'global';
+      localStorage.setItem('gps_room', newRoomName);
+      switchRoom('gps/v3/' + newRoomName);
       settingsDlg.close();
     });
 
-    // Resume updates when tab becomes visible (iOS Safari tends to suspend watchers)
+    // Keep updating when tab becomes active again; rebind watch for iOS
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && shareToggle.dataset.state === 'on') {
         startWatch();
-        updateNowBtn.click();
+        if (lastPos) broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
       }
-    }); });
+    });
 
-    setInterval(() => { if (!lastPos) return; broadcast(lastPos.coords.latitude, lastPos.coords.longitude); }, 15000);
+    // Network changes: re-open peers and rebroadcast
+    window.addEventListener('online', () => { if (shareToggle.dataset.state === 'on' && lastPos) broadcast(lastPos.coords.latitude, lastPos.coords.longitude); });
 
-    setInterval(() => {
-      const now = Date.now();
-      for (const [id, m] of others) { if (now - (m._lastSeen || 0) > 60000) { map.removeLayer(m); others.delete(id); } }
-    }, 10000);
+    // Optional: Wake Lock to keep screen on (prevents iOS pausing timers)
+    async function requestWake(){
+      try{ wakeLock = await navigator.wakeLock.request('screen'); wakeBtn.textContent = '✅ Screen stays on';
+        wakeLock.addEventListener('release', ()=>{ wakeBtn.textContent = '🔒 Keep screen on'; });
+      }catch(e){ wakeBtn.textContent = '⚠️ Wake lock unavailable'; }
+    }
+    wakeBtn.addEventListener('click', ()=>{ if (wakeLock) { wakeLock.release(); wakeLock = null; } else { requestWake(); } });
 
+    // Presence maintenance & cleanup
+    setInterval(() => { if (!lastPos || shareToggle.dataset.state !== 'on') return; broadcast(lastPos.coords.latitude, lastPos.coords.longitude); }, 15000);
+    setInterval(() => { const now = Date.now(); for (const [id, m] of others) { if (now - (m._lastSeen || 0) > 60000) { map.removeLayer(m); others.delete(id); } } }, 10000);
+
+    // Peer status UI
     function setPeerStatus(){
       const dict = gun.back('opt.peers') || {};
       const list = Object.keys(dict);
       let up = 0; list.forEach(u => { const p = dict[u]; if (p && p.wire && !p.wire.hied) up++; });
-      metaText.textContent = `Peers ${up}/${list.length} · Room ${room.split('/').pop()}`;
+      metaText.textContent = `Peers ${up}/${list.length} · Room ${currentRoom.split('/').pop()}`;
     }
-    setInterval(setPeerStatus, 2000);
-    setPeerStatus();
+    setInterval(setPeerStatus, 2000); setPeerStatus();
   </script>
 </body>
 </html>
