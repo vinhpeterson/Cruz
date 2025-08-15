@@ -3,305 +3,137 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>GPS — Simple Mobile Map</title>
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
+  <title>GPS — Shared Location Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
-    :root {
-      --safe-top: env(safe-area-inset-top);
-      --safe-bottom: env(safe-area-inset-bottom);
-      --bg: #0b0b0c; 
-      --fg: #ffffff; 
-      --muted: #a0a0a0; 
-      --accent: #4f8cff;
-    }
-    html, body { height: 100%; }
-    body {
-      margin: 0; background: var(--bg); color: var(--fg);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-    }
-    #app { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
-
-    .status {
-      position: sticky; top: 0; z-index: 1000;
-      padding: calc(8px + var(--safe-top)) 12px 8px 12px;
-      background: linear-gradient(180deg, rgba(15,15,17,0.95), rgba(15,15,17,0.80));
-      backdrop-filter: blur(6px);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      display: flex; gap: 10px; align-items: center; justify-content: space-between;
-    }
-    .status .info { font-size: 13px; line-height: 1.2; color: var(--muted); }
-    .status .info b { color: var(--fg); font-weight: 600; }
-
-    #map { height: 100%; width: 100%; }
-
-    .fab {
-      position: fixed; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1001;
-      display: grid; place-items: center;
-      width: 56px; height: 56px; border-radius: 16px;
-      background: #111216; color: var(--fg);
-      border: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-      user-select: none; -webkit-tap-highlight-color: transparent;
-      cursor: pointer;
-    }
-    .fab:active { transform: translateY(1px); }
-
-    .footer {
-      padding: 8px 12px calc(8px + var(--safe-bottom));
-      background: linear-gradient(0deg, rgba(15,15,17,0.95), rgba(15,15,17,0.80));
-      border-top: 1px solid rgba(255,255,255,0.08);
-      font-size: 12px; color: var(--muted);
-    }
-
-    /* Leaflet dark tile text tweaks */
-    .leaflet-container { background: #0b0b0c; }
-    .leaflet-control-zoom a { background: #17181d; color: #fff; border: 1px solid rgba(255,255,255,0.1); }
-    .leaflet-control-zoom a:hover { background: #1e2026; }
+    :root { --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
+    html, body { margin: 0; height: 100%; background:#0b0b0c; color:#fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+    #app { height: 100%; display:grid; grid-template-rows:auto 1fr; }
+    .status { position:sticky; top:0; z-index:1000; padding:calc(10px + var(--safe-top)) 12px 10px; background:rgba(15,15,17,.95); backdrop-filter: blur(6px); border-bottom:1px solid rgba(255,255,255,.08); display:flex; justify-content:space-between; gap:10px; }
+    .status .info { font-size:13px; color:#b9b9b9; }
+    .status .info b { color:#fff; }
+    #map { height:100%; width:100%; }
+    .fab { position: fixed; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1001; display:grid; place-items:center; width:56px; height:56px; border-radius:16px; background:#111216; color:#fff; border:1px solid rgba(255,255,255,.1); box-shadow:0 8px 30px rgba(0,0,0,.35); font-size:24px; user-select:none; -webkit-tap-highlight-color:transparent; cursor:pointer; }
+    .leaflet-container { background:#0b0b0c; }
+    .hint { position: fixed; left: 12px; bottom: calc(80px + var(--safe-bottom)); z-index: 1001; font-size:12px; color:#b9b9b9; background:rgba(17,18,22,.9); padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.08); max-width: 80vw; }
   </style>
 </head>
 <body>
   <div id="app">
     <div class="status">
       <div class="info" id="statusText">Waiting for GPS…</div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <span class="info" id="metaText">—</span>
-      </div>
+      <div class="info" id="metaText">Peers — · Room —</div>
     </div>
-
     <div id="map"></div>
-
-    <div class="footer">
-      Tip: if location doesn't appear, ensure permissions are granted and you're on HTTPS or localhost.
-    </div>
   </div>
-
   <div class="fab" id="recenterBtn" title="Recenter">📍</div>
+  <div class="hint">If peers show 0/0, try adding <code>?peer=https://relay.peer.ooo/gun</code> to the URL, or open on HTTPS/localhost.</div>
 
-  <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
   <script>
-    // --- Map setup ---
-    const map = L.map('map', {
-      zoomControl: true,
-      attributionControl: true
-    }).setView([0,0], 2);
+    // ------------ Map + GPS ------------
+    const map = L.map('map', { zoomControl:true }).setView([0,0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-    // Lightweight default tiles (Carto/OSM). Swap if you prefer another provider.
-    const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(map);
-
-    // User marker + accuracy ring
     const userIcon = L.icon({
       iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
-          <defs>
-            <filter id="s" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="b"/>
-              <feOffset in="b" dy="2" result="o"/>
-              <feColorMatrix in="o" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .3 0"/>
-              <feBlend in2="SourceGraphic" mode="normal"/>
-            </filter>
-          </defs>
-          <g filter="url(#s)">
-            <circle cx="18" cy="18" r="8" fill="#4f8cff"/>
-            <circle cx="18" cy="18" r="4" fill="white"/>
-          </g>
+          <circle cx="18" cy="18" r="8" fill="#4f8cff"/>
+          <circle cx="18" cy="18" r="4" fill="white"/>
         </svg>
-      `),
-      iconSize: [36, 36], iconAnchor: [18, 18]
+      `), iconSize: [36,36], iconAnchor:[18,18]
     });
-
-    const headingIcon = (angle=0) => L.divIcon({
-      className: '',
-      html: `<div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #4f8cff;transform: rotate(${angle}deg);"></div>`,
-      iconSize: [16, 14],
-      iconAnchor: [8, 7]
-    });
-
-    let marker = L.marker([0,0], { icon: userIcon }).addTo(map);
-    let headingMarker = null;
-    let accuracyCircle = L.circle([0,0], { radius: 0, color: '#4f8cff', fillColor: '#4f8cff', fillOpacity: 0.08, weight: 1 }).addTo(map);
-
-    // UI elements
+    let myMarker = L.marker([0,0], { icon:userIcon }).addTo(map);
+    let accuracyCircle = L.circle([0,0], { radius:0, color:'#4f8cff', fillColor:'#4f8cff', fillOpacity:.08, weight:1 }).addTo(map);
     const statusText = document.getElementById('statusText');
     const metaText = document.getElementById('metaText');
     const recenterBtn = document.getElementById('recenterBtn');
+    let firstFix = true; let lastPos = null;
 
-    let firstFix = true;
-    let shouldRecenter = true;
-
-    recenterBtn.addEventListener('click', () => {
-      shouldRecenter = true;
-      if (lastPos) {
-        map.setView([lastPos.coords.latitude, lastPos.coords.longitude], Math.max(map.getZoom(), 17), { animate: true });
-      }
-    });
-
-    let lastPos = null;
-
-    function onPosition(pos) {
+    function onPosition(pos){
       lastPos = pos;
       const { latitude, longitude, accuracy, speed, heading } = pos.coords;
       const latlng = [latitude, longitude];
-
-      marker.setLatLng(latlng);
+      myMarker.setLatLng(latlng);
       accuracyCircle.setLatLng(latlng).setRadius(accuracy || 0);
-
-      // Heading indicator if available
-      if (typeof heading === 'number' && !Number.isNaN(heading)) {
-        if (!headingMarker) headingMarker = L.marker(latlng, { icon: headingIcon(heading), interactive:false }).addTo(map);
-        headingMarker.setLatLng(latlng);
-        headingMarker.setIcon(headingIcon(heading));
-      } else if (headingMarker) {
-        map.removeLayer(headingMarker); headingMarker = null;
-      }
-
-      if (firstFix || shouldRecenter) {
-        map.setView(latlng, 17, { animate: !firstFix });
-        firstFix = false;
-        shouldRecenter = false;
-      }
-
-      // UI text
-      const acc = accuracy ? Math.round(accuracy) + ' m' : '—';
-      const spd = (typeof speed === 'number' && speed !== null) ? (speed * 3.6).toFixed(0) + ' km/h' : '—';
-      const hdg = (typeof heading === 'number' && !Number.isNaN(heading)) ? Math.round(heading) + '°' : '—';
-      statusText.innerHTML = `<b>GPS Fix:</b> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-      metaText.textContent = `Accuracy ${acc} · Speed ${spd} · Heading ${hdg}`;
+      if (firstFix) { map.setView(latlng, 17); firstFix = false; }
+      statusText.innerHTML = `<b>GPS Fix:</b> ${latitude.toFixed(6)}, ${longitude.toFixed(6)} · ±${Math.round(accuracy||0)}m`;
+      // broadcast to GUN
+      try { broadcast(latitude, longitude); } catch(err) {}
     }
-
-    function onError(err) {
-      const msgs = {
-        1: 'Permission denied. Enable Location Services for this site.',
-        2: 'Position unavailable. Check GPS/Network.',
-        3: 'Timeout getting position. Move to a clearer area or try again.'
-      };
+    function onError(err){
+      const msgs = { 1: 'Permission denied', 2: 'Position unavailable', 3: 'Timeout' };
       statusText.innerHTML = `<b>GPS Error:</b> ${msgs[err.code] || err.message}`;
     }
-
-    // Kick off geolocation watch
-    if ('geolocation' in navigator) {
-      navigator.geolocation.watchPosition(onPosition, onError, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000
-      });
+    if ('geolocation' in navigator){
+      navigator.geolocation.watchPosition(onPosition, onError, { enableHighAccuracy:true, maximumAge:0, timeout:10000 });
     } else {
-      statusText.innerHTML = '<b>GPS Unsupported:</b> Your browser does not support Geolocation API.';
+      statusText.textContent = 'Geolocation not supported in this browser.';
     }
+    recenterBtn.addEventListener('click', () => { if (lastPos) map.setView([lastPos.coords.latitude, lastPos.coords.longitude], 17); });
 
-    // Prevent accidental two-finger zoom scroll trapping on mobile
-    map.gestureHandling && map.gestureHandling.enable();
-  </script>
-  <!-- GUN.js -->
-  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-  <script>
-    // --- Simple multi-user presence with GUN ---
-    // Community relays (uptime can vary). Add your own with ?peer=URL or localStorage.setItem('gunPeers', JSON.stringify([...]))
-    const defaultPeers = [
-      'https://gun-manhattan.herokuapp.com/gun',
+    // ------------ GUN Presence ------------
+    // Multiple community relays; you can override with ?peer=URL or localStorage 'gunPeers'
+    const DEFAULT_PEERS = [
+      'https://relay.peer.ooo/gun',
+      'https://gun-manhattan.herokuapp.com/gun'
     ];
+    let peers = DEFAULT_PEERS.slice();
     try {
       const qp = new URLSearchParams(location.search);
       const urlPeer = qp.get('peer');
       const stored = JSON.parse(localStorage.getItem('gunPeers')||'[]');
-      var peers = [...new Set([...(urlPeer? [urlPeer]:[]), ...stored, ...defaultPeers])];
-    } catch(e){ var peers = defaultPeers }
+      peers = [...new Set([...(urlPeer? [urlPeer]:[]), ...stored, ...DEFAULT_PEERS])];
+    } catch(e){}
 
     const gun = Gun({ peers, retry: 2000, file: false });
-
-    // Room key (everyone in same room sees each other). Use ?room=name to split.
-    const room = 'gps/v1/' + (new URLSearchParams(location.search).get('room') || 'global');
+    const room = 'gps/v2/' + (new URLSearchParams(location.search).get('room') || 'global');
     const presence = gun.get(room);
-
-    // Create / persist a lightweight identity for this device
     const myId = localStorage.getItem('gps_id') || (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
     localStorage.setItem('gps_id', myId);
+    const displayName = localStorage.getItem('gps_name') || 'User';
+    const color = localStorage.getItem('gps_color') || '#22d3ee';
 
-    // Keep map markers of others
-    const otherMarkers = new Map();
-
+    const others = new Map();
     function upsertOther(id, data){
       if (!data || id === myId) return;
-      const { lat, lng, ts, name, color } = data;
+      const { lat, lng, ts, name, color: clr } = data || {};
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
-      let m = otherMarkers.get(id);
-      if (!m) {
-        const ic = L.divIcon({ className: '', html: `<div style="display:grid;place-items:center;">
-            <div style="width:14px;height:14px;border-radius:50%;background:${color||'#22d3ee'};box-shadow:0 0 0 3px rgba(34,211,238,.25);"></div>
-            <div style="margin-top:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:120px;text-align:center;">${(name||'User')}</div>
-          </div>` });
-        m = L.marker([lat,lng], { icon: ic, interactive: false });
-        m.addTo(map);
-        otherMarkers.set(id, m);
-      } else {
-        m.setLatLng([lat,lng]);
-      }
+      let m = others.get(id);
+      const ic = L.divIcon({ className:'', html:`<div style="display:grid;place-items:center;">
+          <div style="width:14px;height:14px;border-radius:50%;background:${clr||'#22d3ee'};box-shadow:0 0 0 3px rgba(34,211,238,.25);"></div>
+          <div style="margin-top:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:120px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(name||'User')}</div>
+        </div>` });
+      if (!m){ m = L.marker([lat,lng], { icon: ic, interactive:false }).addTo(map); others.set(id, m); }
+      else { m.setLatLng([lat,lng]); m.setIcon(ic); }
       m._lastSeen = ts || Date.now();
     }
 
-    // Subscribe to others
     presence.map().on((data, id) => upsertOther(id, data));
-
-    // Broadcast our position on each GPS update
-    const displayName = localStorage.getItem('gps_name') || (navigator.userAgentData?.platform || navigator.platform || 'User');
-    const color = localStorage.getItem('gps_color') || '#4f8cff';
 
     function broadcast(lat, lng){
       presence.get(myId).put({ lat, lng, ts: Gun.state(), name: displayName, color });
     }
 
-    // Hook into existing geolocation handler
-    const _onPosition = onPosition; // from previous script
-    onPosition = function(pos){
-      _onPosition(pos);
-      try { broadcast(pos.coords.latitude, pos.coords.longitude); } catch(e){}
-    }
+    // Keep presence alive if stationary
+    setInterval(() => { if (!lastPos) return; broadcast(lastPos.coords.latitude, lastPos.coords.longitude); }, 15000);
 
-    // Periodic rebroadcast (keeps presence fresh if stationary)
-    setInterval(() => {
-      if (!lastPos) return;
-      broadcast(lastPos.coords.latitude, lastPos.coords.longitude);
-    }, 15000);
-
-    // GC stale markers (peer-to-peer TTL simulation)
+    // GC stale markers
     setInterval(() => {
       const now = Date.now();
-      for (const [id, m] of otherMarkers) {
-        if (now - (m._lastSeen || 0) > 60000) { // >60s without update: hide
-          map.removeLayer(m); otherMarkers.delete(id);
-        }
-      }
+      for (const [id, m] of others) { if (now - (m._lastSeen || 0) > 60000) { map.removeLayer(m); others.delete(id); } }
     }, 10000);
 
-    // UI wiring: show relay/room status
-    const statusEl = document.getElementById('statusText');
-    const metaEl = document.getElementById('metaText');
-
+    // Peer status UI
     function setPeerStatus(){
-      const list = Object.keys(gun.back('opt.peers')||{});
-      const up = list.filter(u => gun.back('opt.peers')[u] && gun.back('opt.peers')[u].wire && !gun.back('opt.peers')[u].wire.hied);
-      metaEl.textContent = `Peers ${up.length}/${list.length} · Room ${room.split('/').pop()}`;
+      const dict = gun.back('opt.peers') || {};
+      const list = Object.keys(dict);
+      let up = 0; list.forEach(u => { const p = dict[u]; if (p && p.wire && !p.wire.hied) up++; });
+      metaText.textContent = `Peers ${up}/${list.length} · Room ${room.split('/').pop()}`;
     }
-
-    setInterval(setPeerStatus, 3000);
-
-    // Quick settings helpers in console:
-    // localStorage.setItem('gps_name', 'Vinh'); location.reload();
-    // localStorage.setItem('gps_color', '#22c55e'); location.reload();
-    // localStorage.setItem('gunPeers', JSON.stringify(['https://your-relay.example.com/gun'])); location.reload();
+    setInterval(setPeerStatus, 2000);
+    setPeerStatus();
   </script>
 </body>
 </html>
